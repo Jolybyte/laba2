@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Распознавание объектов с TensorFlow.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 680px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        #webcam, #canvas {
+            width: 640px;
+            height: 360px;
+            border: 2px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 640px;
+            height: 360px;
+        }
+        
+        .info {
+            margin-top: 15px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        @media (max-width: 700px) {
+            #webcam, #canvas, .video-container {
+                width: 100%;
+                height: auto;
+                max-width: 640px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Распознавание объектов с COCO-SSD</h1>
+    
+    <div class="container">
+        <div class="video-container">
+            <video id="webcam" width="640" height="360" autoplay muted playsinline></video>
+            <canvas id="canvas" width="640" height="360"></canvas>
+        </div>
+    </div>
+    
+    <p class="info">Разрешение камеры: 640x360 | Обнаруженные объекты выделяются зелеными рамками</p>
+    
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Установка размеров canvas в соответствии с разрешением камеры
+        canvas.width = 640;
+        canvas.height = 360;
+        
+        async function setupWebcam() {
+            try {
+                const constraints = {
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 360 }
+                    }
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                return new Promise(resolve => {
+                    video.onloadedmetadata = () => {
+                        // Убедимся, что видео использует нужное разрешение
+                        video.width = 640;
+                        video.height = 360;
+                        resolve(video);
+                    };
+                });
+            } catch (error) {
+                console.error('Ошибка доступа к веб-камере:', error);
+                alert('Не удалось получить доступ к веб-камере. Пожалуйста, проверьте разрешения.');
+            }
+        }
+        
+        async function loadModelAndDetect() {
+            // Загрузка модели COCO-SSD
+            const model = await cocoSsd.load();
+            
+            // Настройка веб-камеры
+            await setupWebcam();
+            video.play();
+            
+            // Функция для непрерывного распознавания
+            async function detectFrame() {
+                const predictions = await model.detect(video);
+                
+                // Очистка canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Отрисовка bounding boxes
+                predictions.forEach(prediction => {
+                    const [x, y, width, height] = prediction.bbox;
+                    const text = `${prediction.class} (${Math.round(prediction.score * 100)}%)`;
+                    
+                    // Рисуем bounding box
+                    ctx.strokeStyle = '#00FF00';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x, y, width, height);
+                    
+                    // Рисуем фон для текста
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    const textWidth = ctx.measureText(text).width;
+                    ctx.fillRect(x, y - 20, textWidth + 10, 20);
+                    
+                    // Рисуем текст
+                    ctx.fillStyle = '#00FF00';
+                    ctx.font = '16px Arial';
+                    ctx.fillText(text, x + 5, y - 5);
+                });
+                
+                requestAnimationFrame(detectFrame);
+            }
+            
+            detectFrame();
+        }
+        
+        loadModelAndDetect().catch(console.error);
+    </script>
+</body>
+</html>
